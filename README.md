@@ -8,7 +8,7 @@ detection models via uploaded audio files.
 
 TBD
 
-## API
+## Usage
 
 TBD
 

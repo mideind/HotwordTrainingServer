@@ -41,7 +41,7 @@ __version__ = 0.1
 app = FastAPI()
 
 
-def _err(msg: str) -> JSONResponse:
+def err(msg: str) -> JSONResponse:
     return JSONResponse(content={"err": True, "errmsg": msg})
 
 
@@ -77,13 +77,13 @@ async def test():
 
 
 TMP_DIR = "tmp"
-MAX_FILESIZE = 1024 * 1024  # 1 MB
+MAX_FILESIZE = 500 * 1024  # 500 KB
 PMDL_MIMETYPE = "application/pmdl"
 PMDL_FILENAME = "model.pmdl"
 NUM_WAV_REQ = 3
 
 
-def gen_outpaths(num=4) -> Tuple:
+def gen_outpaths(num: int = 4) -> Tuple:
     """ Generate random filenames to use when we write to filesystem. """
     names = []
     for n in range(0, num):
@@ -104,7 +104,7 @@ def cleanup(filepaths: Tuple) -> None:
             os.remove(path)
 
 
-def is_wav(data: bytes) -> bool:
+def is_valid_wav(data: bytes) -> bool:
     """ Check that data is WAV file w. correct audio format. """
     fh = BytesIO(data)
     riff, size, fformat = struct.unpack("<4sI4s", fh.read(12))
@@ -137,25 +137,28 @@ def is_wav(data: bytes) -> bool:
 
 @app.post("/train", response_class=Response)  # type: ignore
 async def train(files: List[UploadFile] = File(...)) -> Response:
-    """Receives training files as multipart/form-data, runs the
-    training process on them and returns the resulting pmdl file."""
+    """Receives uploaded WAV training files as multipart/form-data, runs
+    the training process on them and returns the resulting pmdl file."""
+
+    # Check for API key
+    # TODO: Implement this
 
     # Make sure we have the correct number of files
     numfiles = len(files)
     if numfiles != NUM_WAV_REQ:
-        return _err(f"Incorrect number of files: {numfiles} ({NUM_WAV_REQ} required)")
+        return err(f"Incorrect number of files: {numfiles} ({NUM_WAV_REQ} required)")
 
-    # Read and verify all uploaded files
+    # Read all uploaded files into memory and verify
     file_contents: List[bytes] = []
     for f in files:
         contents = cast(bytes, await f.read())
         # Check if file size is excessive
         if len(contents) > MAX_FILESIZE:
-            return _err(f"File too large: {f.filename}")
+            return err(f"File too large: {f.filename}")
 
         # Make sure this is 16-bit mono WAV audio at 16Khz
-        if not is_wav(contents):
-            return _err(f"Wrong file format: {f.filename}")
+        if not is_valid_wav(contents):
+            return err(f"Wrong file format: {f.filename}")
 
         file_contents.append(contents)
 
@@ -163,7 +166,7 @@ async def train(files: List[UploadFile] = File(...)) -> Response:
     basepath, _ = os.path.split(os.path.realpath(__file__))
     os.chdir(basepath)
 
-    # Write files to tmp directory on filesystem
+    # Write files to tmp/ directory on filesystem
     try:
         filepaths = gen_outpaths()
         # print(filepaths)
@@ -172,7 +175,7 @@ async def train(files: List[UploadFile] = File(...)) -> Response:
                 fh.write(fdata)
     except Exception as e:
         cleanup(filepaths)
-        return _err(f"Error writing to filesystem: {e}")
+        return err(f"Error writing to filesystem: {e}")
 
     # Run model training script
     try:
@@ -181,17 +184,18 @@ async def train(files: List[UploadFile] = File(...)) -> Response:
         # print(cmd)
         result = subprocess.run(cmd, capture_output=True)
         if result.returncode != 0:
-            return _err(
+            return err(
                 f"Model generation exited with code {0}.\n{1}\n{2}".format(
                     result.returncode, result.stderr, result.stdout
                 )
             )
     except Exception as e:
         cleanup(filepaths)
-        return _err(f"Error generating model: {e}")
+        return err(f"Error generating model: {e}")
 
     # Read model from filesystem
-    with open(filepaths[3], "rb") as fh:
+    model_outpath = filepaths[3]
+    with open(model_outpath, "rb") as fh:
         model_bytes = fh.read()
 
     # Delete generated files
