@@ -26,7 +26,9 @@ from typing import List, Tuple, cast
 
 import os
 import struct
+import json
 import subprocess
+import base64
 from io import BytesIO
 from uuid import uuid1
 from pathlib import Path
@@ -78,7 +80,7 @@ async def test():
 
 TMP_DIR = "tmp"
 MAX_FILESIZE = 500 * 1024  # 500 KB
-PMDL_MIMETYPE = "application/pmdl"
+PMDL_MIMETYPE = "application/octet-stream"
 PMDL_FILENAME = "model.pmdl"
 NUM_WAV_REQ = 3
 
@@ -136,7 +138,7 @@ def is_valid_wav(data: bytes) -> bool:
 
 
 @app.post("/train", response_class=Response)  # type: ignore
-async def train(files: List[UploadFile] = File(...)) -> Response:
+async def train(files: List[UploadFile] = File(...), text: bool = True) -> Response:
     """Receives uploaded WAV training files as multipart/form-data, runs
     the training process on them and returns the resulting pmdl file."""
 
@@ -201,11 +203,23 @@ async def train(files: List[UploadFile] = File(...)) -> Response:
     # Delete generated files
     cleanup(filepaths)
 
-    # Return it as a file w. correct headers
-    headers = {"Content-Disposition": f"attachment; filename={PMDL_FILENAME}"}
-    return Response(
-        content=model_bytes,
-        status_code=200,
-        media_type=PMDL_MIMETYPE,
-        headers=headers,
-    )
+    if text:
+        b : bytes = base64.standard_b64encode(model_bytes)
+        json_response = {
+            "err": False,
+            "data": b.decode("ascii"),
+        }
+        return Response(
+            content=json.dumps(json_response),
+            status_code=200,
+            media_type="application/json"
+        )
+    else:
+        # Return it as a file w. correct headers
+        headers = {"Content-Disposition": f"attachment; filename={PMDL_FILENAME}"}
+        return Response(
+            content=model_bytes,
+            status_code=200,
+            media_type=PMDL_MIMETYPE,
+            headers=headers,
+        )

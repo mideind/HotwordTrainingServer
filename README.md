@@ -1,8 +1,11 @@
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Python 3.6](https://img.shields.io/badge/python-3.6-blue.svg)](https://www.python.org/downloads/release/python-360/)
+
 # Hotword Training Server
 
 This repository contains the source code to a hotword training server.
-The server exposes a JSON-based REST API to train Snowboy hotword
-detection models via uploaded audio files.
+The server exposes a REST API to train Snowboy hotword detection models
+via uploaded WAV audio files. Requires Python 3.6+.
 
 ## Setup
 
