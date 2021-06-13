@@ -33,7 +33,7 @@ if basepath.endswith("/tests") or basepath.endswith("\\tests"):
     basepath = basepath[0:-6]
     sys.path.append(basepath)
 
-from app import *  # noqa
+from main import *  # noqa
 
 
 def test_all():
