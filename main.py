@@ -128,7 +128,7 @@ def cleanup(filepaths: Tuple) -> None:
             try:
                 os.remove(path)
             except Exception as e:
-                logging.err(f"Unable to delete file at path {path}: {e}")
+                logging.error(f"Unable to delete file at path {path}: {e}")
 
 
 def is_valid_wav(data: bytes) -> bool:
@@ -268,6 +268,6 @@ if __name__ == "__main__":
         uvicorn main:app --host [hostname] --port [portnum]
 
     """
-    import uvicorn
+    import uvicorn  # type: ignore
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
