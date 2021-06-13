@@ -54,43 +54,46 @@ def err(msg: str) -> JSONResponse:
 @app.get("/", response_class=HTMLResponse)  # type: ignore
 async def root() -> str:
     return """
-<html>
-    <head><title>Hotword Training Server v{0}</title></head>
-    <body>
-        <h1>Hotword Training Server v{0}</h1>
-        <ul>
-            <li><a href="/docs">Documentation</a></li>
-            <li><a href="/test">Testing</a></li>
-        </ul>
-    </body>
-</html>
-""".format(
-        __version__
+    <html>
+        <head>
+            <title>{0} v{1}</title>
+        </head>
+        <body>
+            <h1>{0} v{1}</h1>
+            <ul>
+                <li><a href="/docs">Documentation</a></li>
+                <li><a href="/test">Testing</a></li>
+            </ul>
+        </body>
+    </html>
+    """.format(
+        PROGRAM_NAME, __version__
     )
 
 
 @app.get("/test", response_class=HTMLResponse)
 async def test():
     return """
-<body>
-<!--<form action="/files/" enctype="multipart/form-data" method="post">
-<input name="files" type="file" multiple>
-<input type="submit">
-</form>-->
-<form action="/train" enctype="multipart/form-data" method="post">
-<input name="files" type="file" multiple>
-<input type="submit">
-</form>
-</body>
-    """
+    <body>
+        <head>
+            <title>Testing - {0} v{1}</title>
+        </head>
+        <form action="/train" enctype="multipart/form-data" method="post">
+            <input name="files" type="file" multiple>
+            <input type="submit">
+        </form>
+    </body>
+    """.format(
+        PROGRAM_NAME, __version__
+    )
 
 
 TMP_DIR = "tmp"
 MAX_FILESIZE = 500 * 1024  # 500 KB
-PMDL_FILENAME = "model.pmdl"
+MODEL_SUFFIX = "pmdl"
 NUM_WAV_REQ = 3
 
-PMDL_MIMETYPE = "application/octet-stream"
+MODEL_MIMETYPE = "application/octet-stream"  # Generic data mimetype
 JSON_MIMETYPE = "application/json"
 WAV_MIMETYPE = "audio/wav"
 
@@ -237,12 +240,14 @@ async def train(
     # Delete generated files
     cleanup(filepaths)
 
+    model_filename = f"model-{str(uuid1())}.{MODEL_SUFFIX}"
+
     if text:
         # Return JSON response
         b: bytes = base64.standard_b64encode(model_bytes)
         json_response = {
             "err": False,
-            "name": str(uuid1()),
+            "name": model_filename,
             "data": b.decode("ascii"),
         }
         return Response(
@@ -252,11 +257,11 @@ async def train(
         )
     else:
         # Return a file w. correct headers
-        headers = {"Content-Disposition": f"attachment; filename={PMDL_FILENAME}"}
+        headers = {"Content-Disposition": f"attachment; filename={model_filename}"}
         return Response(
             content=model_bytes,
             status_code=200,
-            media_type=PMDL_MIMETYPE,
+            media_type=MODEL_MIMETYPE,
             headers=headers,
         )
 
