@@ -203,7 +203,7 @@ async def train(
 
         file_contents.append(contents)
 
-    # Make sure current working directory is repo root
+    # Make sure current working directory is the repo root
     basepath, _ = os.path.split(os.path.realpath(__file__))
     os.chdir(basepath)
 
