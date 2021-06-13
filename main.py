@@ -29,18 +29,22 @@ import struct
 import json
 import subprocess
 import base64
+import logging
 from io import BytesIO
 from uuid import uuid1
 from pathlib import Path
+from functools import lru_cache
 
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import Response, JSONResponse, HTMLResponse
 
 
+PROGRAM_NAME = "Hotword Training Server"
+
 __version__ = 0.1
 
 
-app = FastAPI()
+app = FastAPI(title=PROGRAM_NAME)
 
 
 def err(msg: str) -> JSONResponse:
@@ -54,7 +58,10 @@ async def root() -> str:
     <head><title>Hotword Training Server v{0}</title></head>
     <body>
         <h1>Hotword Training Server v{0}</h1>
-        <ul><li><a href="/docs">Documentation</a></li></ul>
+        <ul>
+            <li><a href="/docs">Documentation</a></li>
+            <li><a href="/test">Testing</a></li>
+        </ul>
     </body>
 </html>
 """.format(
@@ -80,9 +87,24 @@ async def test():
 
 TMP_DIR = "tmp"
 MAX_FILESIZE = 500 * 1024  # 500 KB
-PMDL_MIMETYPE = "application/octet-stream"
 PMDL_FILENAME = "model.pmdl"
 NUM_WAV_REQ = 3
+
+PMDL_MIMETYPE = "application/octet-stream"
+JSON_MIMETYPE = "application/json"
+WAV_MIMETYPE = "audio/wav"
+
+
+@lru_cache(maxsize=2)
+def read_api_key(key_name: str) -> str:
+    """ Read the given key from a text file in resources directory. Cached. """
+    path = os.path.join(os.path.dirname(__file__), "keys", key_name + ".txt")
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        pass
+    return ""
 
 
 def gen_outpaths(num: int = 4) -> Tuple:
@@ -99,18 +121,21 @@ def gen_outpaths(num: int = 4) -> Tuple:
 
 
 def cleanup(filepaths: Tuple) -> None:
-    """ Delete all files created during model training. """
+    """ Delete all files in filepaths, if they exist. """
     for fn in filepaths:
         path = Path(fn)
         if path.exists():
-            os.remove(path)
+            try:
+                os.remove(path)
+            except Exception as e:
+                logging.err(f"Unable to delete file at path {path}: {e}")
 
 
 def is_valid_wav(data: bytes) -> bool:
-    """ Check that data is WAV file w. correct audio format. """
+    """ Make sure that data is a WAV file w. correct audio format. """
     fh = BytesIO(data)
     riff, size, fformat = struct.unpack("<4sI4s", fh.read(12))
-    # print("Riff: %s, Chunk Size: %i, format: %s" % (riff, size, fformat))
+    # logging.info("Riff: %s, Chunk Size: %i, format: %s" % (riff, size, fformat))
 
     if riff != b"RIFF" or fformat != b"WAVE":
         return False
@@ -129,7 +154,7 @@ def is_valid_wav(data: bytes) -> bool:
     # if channels != 1 or samplerate != 16000:
     #     return False
 
-    # print(
+    # logging.info(
     #     "Format: %i, Channels %i, Sample Rate: %i"
     #     % (aformat, channels, samplerate)
     # )
@@ -138,22 +163,33 @@ def is_valid_wav(data: bytes) -> bool:
 
 
 @app.post("/train", response_class=Response)  # type: ignore
-async def train(files: List[UploadFile] = File(...), text: bool = True) -> Response:
+async def train(
+    files: List[UploadFile] = File(...), text: bool = True, api_key: str = None
+) -> Response:
     """Receives uploaded WAV training files as multipart/form-data, runs
     the training process on them and returns the resulting pmdl file."""
 
     # Check for API key
-    # TODO: Implement this
+    key = read_api_key("APIKey")
+    if key and api_key != key:
+        return err("Wrong API Key")
 
     # Make sure we have the correct number of files
     numfiles = len(files)
     if numfiles != NUM_WAV_REQ:
         return err(f"Incorrect number of files: {numfiles} ({NUM_WAV_REQ} required)")
 
-    # Read all uploaded files into memory and verify
+    # Inspect, load and verify all uploaded files
     file_contents: List[bytes] = []
     for f in files:
+        # Check content-type
+        if f.content_type != WAV_MIMETYPE:
+            return err(f"Wrong mimetype for file {f.filename}: {f.content_type}")
+
+        # Read contents of file into memory
+        # TODO: More efficient to do a seek first to see if file size is excessive
         contents = cast(bytes, await f.read())
+
         # Check if file size is excessive
         if len(contents) > MAX_FILESIZE:
             return err(f"File too large: {f.filename}")
@@ -171,7 +207,6 @@ async def train(files: List[UploadFile] = File(...), text: bool = True) -> Respo
     # Write files to tmp/ directory on filesystem
     try:
         filepaths = gen_outpaths()
-        # print(filepaths)
         for ix, fdata in enumerate(file_contents):
             with open(filepaths[ix], "wb") as fh:
                 fh.write(fdata)
@@ -183,7 +218,6 @@ async def train(files: List[UploadFile] = File(...), text: bool = True) -> Respo
     try:
         cmd = ["./gen_model.sh"]
         cmd.extend(filepaths)
-        # print(cmd)
         result = subprocess.run(cmd, capture_output=True)
         if result.returncode != 0:
             return err(
@@ -204,18 +238,20 @@ async def train(files: List[UploadFile] = File(...), text: bool = True) -> Respo
     cleanup(filepaths)
 
     if text:
-        b : bytes = base64.standard_b64encode(model_bytes)
+        # Return JSON response
+        b: bytes = base64.standard_b64encode(model_bytes)
         json_response = {
             "err": False,
+            "name": str(uuid1()),
             "data": b.decode("ascii"),
         }
         return Response(
             content=json.dumps(json_response),
             status_code=200,
-            media_type="application/json"
+            media_type=JSON_MIMETYPE,
         )
     else:
-        # Return it as a file w. correct headers
+        # Return a file w. correct headers
         headers = {"Content-Disposition": f"attachment; filename={PMDL_FILENAME}"}
         return Response(
             content=model_bytes,
@@ -223,3 +259,15 @@ async def train(files: List[UploadFile] = File(...), text: bool = True) -> Respo
             media_type=PMDL_MIMETYPE,
             headers=headers,
         )
+
+
+if __name__ == "__main__":
+    """Command line invocation for testing purposes.
+    In production, use uvicorn to run this web application thus:
+
+        uvicorn main:app --host [hostname] --port [portnum]
+
+    """
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
