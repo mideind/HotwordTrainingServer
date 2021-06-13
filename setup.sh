@@ -7,3 +7,4 @@ virtualenv -p python2.7 venv
 source venv/bin/activate
 cd examples/Python || exit 1
 pip install -r requirements.txt
+deactivate
