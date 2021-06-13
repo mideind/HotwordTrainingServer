@@ -7,7 +7,7 @@ MODEL_OUT_PATH=$4
 
 # Activate Snowboy Python 2.7 virtual environment
 # shellcheck disable=SC1091
-source "$SNOWBOYDIR/$VENV/snowboy/bin/activate"
+source "$SNOWBOYDIR/$VENV/bin/activate"
 
 cd "$SNOWBOYDIR/examples/Python" || exit 1
 

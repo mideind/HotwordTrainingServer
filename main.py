@@ -48,11 +48,13 @@ app = FastAPI(title=PROGRAM_NAME)
 
 
 def err(msg: str) -> JSONResponse:
+    """ Return error response with error message. """
     return JSONResponse(content={"err": True, "errmsg": msg})
 
 
 @app.get("/", response_class=HTMLResponse)  # type: ignore
 async def root() -> str:
+    """ Web server root. """
     return """
     <html>
         <head>
@@ -73,6 +75,7 @@ async def root() -> str:
 
 @app.get("/test", response_class=HTMLResponse)
 async def test():
+    """ Test model generation via upload form. """
     return """
     <body>
         <head>
@@ -100,7 +103,7 @@ WAV_MIMETYPE = "audio/wav"
 
 @lru_cache(maxsize=2)
 def read_api_key(key_name: str) -> str:
-    """ Read the given key from a text file in resources directory. Cached. """
+    """ Read the given key from a text file in keys directory. Cached. """
     path = os.path.join(os.path.dirname(__file__), "keys", key_name + ".txt")
     try:
         with open(path) as f:
@@ -170,12 +173,12 @@ async def train(
     files: List[UploadFile] = File(...), text: bool = True, api_key: str = None
 ) -> Response:
     """Receives uploaded WAV training files as multipart/form-data, runs
-    the training process on them and returns the resulting pmdl file."""
+    the training process on them and returns the resulting model file."""
 
     # Check for API key
     key = read_api_key("APIKey")
     if key and api_key != key:
-        return err("Wrong API Key")
+        return err("Invalid API Key")
 
     # Make sure we have the correct number of files
     numfiles = len(files)
@@ -267,7 +270,8 @@ async def train(
 
 
 if __name__ == "__main__":
-    """Command line invocation for testing purposes.
+    """
+    Command line invocation for testing purposes.
     In production, use uvicorn to run this web application thus:
 
         uvicorn main:app --host [hostname] --port [portnum]
