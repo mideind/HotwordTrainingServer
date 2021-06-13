@@ -6,7 +6,8 @@
 
 This repository contains the source code to a hotword training server.
 The server exposes a REST API to train Snowboy hotword detection models
-via uploaded WAV audio files. Requires Python 3.6+.
+via uploaded WAV audio files. Requires Python 3.6+ and runs on Linux
+or macOS (or, in theory, any reasonable Unix system).
 
 ## Setup and usage
 

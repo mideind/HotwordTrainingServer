@@ -19,17 +19,19 @@
     along with this program.  If not, see http://www.gnu.org/licenses/.
 
 
-"""
+    Main web application. Run via uvicorn, e.g. "uvicorn main:app".
 
+
+"""
 
 from typing import List, Tuple, cast
 
 import os
-import struct
 import json
-import subprocess
+import struct
 import base64
 import logging
+import subprocess
 from io import BytesIO
 from uuid import uuid1
 from pathlib import Path
@@ -39,20 +41,29 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import Response, JSONResponse, HTMLResponse
 
 
+__version__ = 0.1
+
 PROGRAM_NAME = "Hotword Training Server"
 
-__version__ = 0.1
+TMP_DIR = "tmp"  # Relative to repo root
+MAX_FILESIZE = 500 * 1024  # 500 KB
+MODEL_SUFFIX = "pmdl"
+NUM_WAV_REQ = 3  # TODO: Make this variable
+
+MODEL_MIMETYPE = "application/octet-stream"  # Generic data mimetype
+JSON_MIMETYPE = "application/json"
+WAV_MIMETYPE = "audio/wav"
 
 
 app = FastAPI(title=PROGRAM_NAME)
 
 
 def err(msg: str) -> JSONResponse:
-    """ Return error response with error message. """
+    """ Return error response with description message. """
     return JSONResponse(content={"err": True, "errmsg": msg})
 
 
-@app.get("/", response_class=HTMLResponse)  # type: ignore
+@app.get("/", response_class=HTMLResponse)
 async def root() -> str:
     """ Web server root. """
     return """
@@ -77,28 +88,20 @@ async def root() -> str:
 async def test():
     """ Test model generation via upload form. """
     return """
-    <body>
+    <html>
         <head>
             <title>Testing - {0} v{1}</title>
         </head>
-        <form action="/train" enctype="multipart/form-data" method="post">
-            <input name="files" type="file" multiple>
-            <input type="submit">
-        </form>
-    </body>
+        <body>
+            <form action="/train" enctype="multipart/form-data" method="post">
+                <input name="files" type="file" multiple>
+                <input type="submit">
+            </form>
+        </body>
+    </HTML>
     """.format(
         PROGRAM_NAME, __version__
     )
-
-
-TMP_DIR = "tmp"
-MAX_FILESIZE = 500 * 1024  # 500 KB
-MODEL_SUFFIX = "pmdl"
-NUM_WAV_REQ = 3
-
-MODEL_MIMETYPE = "application/octet-stream"  # Generic data mimetype
-JSON_MIMETYPE = "application/json"
-WAV_MIMETYPE = "audio/wav"
 
 
 @lru_cache(maxsize=2)
@@ -168,7 +171,7 @@ def is_valid_wav(data: bytes) -> bool:
     return True
 
 
-@app.post("/train", response_class=Response)  # type: ignore
+@app.post("/train", response_class=Response)
 async def train(
     files: List[UploadFile] = File(...), text: bool = True, api_key: str = None
 ) -> Response:
@@ -198,11 +201,11 @@ async def train(
 
         # Check if file size is excessive
         if len(contents) > MAX_FILESIZE:
-            return err(f"File too large: {f.filename}")
+            return err(f"File {f.filename} exceeds max size ({MAX_FILESIZE} bytes)")
 
         # Make sure this is 16-bit mono WAV audio at 16Khz
         if not is_valid_wav(contents):
-            return err(f"Wrong file format: {f.filename}")
+            return err(f"Wrong file format: {f.filename}. Should be WAV.")
 
         file_contents.append(contents)
 
@@ -210,7 +213,7 @@ async def train(
     basepath, _ = os.path.split(os.path.realpath(__file__))
     os.chdir(basepath)
 
-    # Write files to tmp/ directory on filesystem
+    # Write uploaded files to tmp/ directory on filesystem
     try:
         filepaths = gen_outpaths()
         for ix, fdata in enumerate(file_contents):
@@ -222,6 +225,8 @@ async def train(
 
     # Run model training script
     try:
+        # Script accepts audio file paths as arguments, with
+        # final path arg as model output destination
         cmd = ["./gen_model.sh"]
         cmd.extend(filepaths)
         result = subprocess.run(cmd, capture_output=True)
@@ -259,7 +264,7 @@ async def train(
             media_type=JSON_MIMETYPE,
         )
     else:
-        # Return a file w. correct headers
+        # Return a file with correct header
         headers = {"Content-Disposition": f"attachment; filename={model_filename}"}
         return Response(
             content=model_bytes,
@@ -272,7 +277,7 @@ async def train(
 if __name__ == "__main__":
     """
     Command line invocation for testing purposes.
-    In production, use uvicorn to run this web application thus:
+    In production, use uvicorn to run this web application:
 
         uvicorn main:app --host [hostname] --port [portnum]
 
