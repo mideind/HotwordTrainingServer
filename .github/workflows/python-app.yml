@@ -37,3 +37,10 @@ jobs:
     - name: Test with pytest
       run: |
         python -m pytest tests/
+    - name: Install model generation dependencies
+      run: |
+        ./setup.sh
+    - name: Test gen_model script
+      run: |
+        ./gen_model.sh tests/files/r1.wav tests/files/r2.wav tests/files/r3.wav /tmp/out.pmdl
+        test -s /tmp/out.pmdl
