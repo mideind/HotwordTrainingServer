@@ -172,6 +172,7 @@ def is_valid_wav(data: bytes) -> bool:
 
 
 @app.post("/train", response_class=Response)
+@app.post("/train/v1", response_class=Response)
 async def train(
     files: List[UploadFile] = File(...), text: bool = True, api_key: str = None
 ) -> Response:
@@ -213,7 +214,7 @@ async def train(
     basepath, _ = os.path.split(os.path.realpath(__file__))
     os.chdir(basepath)
 
-    # Write uploaded files to tmp/ directory on filesystem
+    # Write uploaded files to temp directory on filesystem
     try:
         filepaths = gen_outpaths()
         for ix, fdata in enumerate(file_contents):
